@@ -1,6 +1,7 @@
 import sys
 import os
 import shutil
+import tempfile
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QSlider, QFileDialog, QProgressBar,
@@ -515,6 +516,8 @@ class ImageCompressorApp(QMainWindow):
         self.compress_button.clicked.connect(self.compress_image)
         self.save_as_button.clicked.connect(self.save_compressed_image)
         self.copy_button.clicked.connect(self.copy_to_clipboard)
+        # Update the quality label initially
+        self.update_quality_label(self.quality_presets.value)
         
     def select_image(self):
         """Handle image selection"""
@@ -551,44 +554,27 @@ class ImageCompressorApp(QMainWindow):
         """Handle image compression"""
         if not self.current_image_path:
             return
-            
         try:
-            # Create output directory if it doesn't exist
-            output_dir = os.path.join(os.path.dirname(self.current_image_path), "compressed")
-            os.makedirs(output_dir, exist_ok=True)
-            
-            # Get output path
+            # Create a temporary file for the compressed image
             filename = os.path.basename(self.current_image_path)
-            output_path = os.path.join(output_dir, f"compressed_{filename}")
-            
-            # Show progress
+            suffix = os.path.splitext(filename)[1]
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            temp_file.close()
+            output_path = temp_file.name
             self.stats_frame.progress_bar.setVisible(True)
             self.stats_frame.progress_bar.setValue(0)
-            
-            # Compress image
             quality = self.quality_presets.value
             original_size, compressed_size = self.image_processor.compress_image(
                 self.current_image_path,
                 output_path,
                 quality
             )
-            
-            # Store the compressed image path
             self.last_compressed_path = output_path
-            
-            # Update compressed preview
             self.compressed_preview.set_image(output_path)
-            
-            # Enable action buttons
             self.save_as_button.setEnabled(True)
             self.copy_button.setEnabled(True)
-            
-            # Update stats
             self.stats_frame.update_stats(original_size, compressed_size)
-            
-            # Update progress
             self.stats_frame.progress_bar.setValue(100)
-            
         except Exception as e:
             self.stats_frame.title.setText("Error")
             self.stats_frame.percentage_label.setText(str(e))
@@ -603,21 +589,15 @@ class ImageCompressorApp(QMainWindow):
         if not self.last_compressed_path or not os.path.exists(self.last_compressed_path):
             QMessageBox.warning(self, "Error", "No compressed image available to save.")
             return
-
-        # Get the default filename from the compressed image
-        default_name = os.path.basename(self.last_compressed_path)
-        
-        # Open save dialog
+        default_name = os.path.basename(self.current_image_path)
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Compressed Image",
             default_name,
             "Images (*.jpg *.jpeg *.png *.webp)"
         )
-        
         if file_path:
             try:
-                # Copy the compressed image to the new location
                 shutil.copy2(self.last_compressed_path, file_path)
                 self.update_status(f"Image saved to: {file_path}")
             except Exception as e:
